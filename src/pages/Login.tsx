@@ -10,10 +10,28 @@ export default function Login() {
     setIsLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error('Login error:', error);
-      alert('Gagal masuk. Pastikan Anda menggunakan akun Google yang valid.');
+      console.error('[v0] Login error details:', error);
+      
+      let errorMessage = 'Gagal masuk. Pastikan Anda menggunakan akun Google yang valid.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('auth/popup-closed-by-user')) {
+          errorMessage = 'Pop-up login ditutup. Silakan coba lagi.';
+        } else if (error.message.includes('auth/popup-blocked')) {
+          errorMessage = 'Pop-up login diblokir oleh browser. Harap izinkan pop-up untuk domain ini.';
+        } else if (error.message.includes('auth/operation-not-allowed')) {
+          errorMessage = 'Google Sign-in belum diaktifkan. Hubungi administrator.';
+        } else if (error.message.includes('auth/invalid-api-key')) {
+          errorMessage = 'Konfigurasi Firebase tidak valid. Harap periksa pengaturan.';
+        }
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
     }

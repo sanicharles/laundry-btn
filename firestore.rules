@@ -1,0 +1,116 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: transactions
+// Fields:
+//   - invoiceNo: string (required)
+//   - customerId: string (optional)
+//   - customerName: string (required)
+//   - customerPhone: string (required)
+//   - customerAddress: string (optional)
+//   - serviceId: string (optional)
+//   - serviceName: string (required)
+//   - weight: number (required)
+//   - pricePerKg: number (required)
+//   - totalPrice: number (required)
+//   - entryDate: timestamp (required)
+//   - estimateDate: timestamp (required)
+//   - status: string (required, enum: ["Masuk", "Proses", "Selesai", "Diambil"])
+//   - notes: string (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: customers
+// Fields:
+//   - name: string (required)
+//   - phone: string (required)
+//   - address: string (optional)
+//   - lastVisit: timestamp (optional)
+//   - totalTransactions: number (optional)
+//
+// Collection: services
+// Fields:
+//   - name: string (required)
+//   - pricePerKg: number (required)
+//   - description: string (optional)
+//
+// Collection: settings
+// Fields:
+//   - laundryName: string
+//   - address: string
+//   - phone: string
+//   - whatsappMessage: string
+//   - nextInvoiceNo: number
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "sanicharles323@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidString(field, min, max) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= min &&
+             request.resource.data[field].size() <= max;
+    }
+
+    function isValidNumber(field, min) {
+      return request.resource.data[field] is number &&
+             request.resource.data[field] >= min;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        isValidString('invoiceNo', 1, 50) &&
+        isValidString('customerName', 1, 100) &&
+        isValidString('customerPhone', 1, 20) &&
+        isValidNumber('weight', 0) &&
+        isValidNumber('totalPrice', 0) &&
+        request.resource.data.status in ["Masuk", "Proses", "Selesai", "Diambil"];
+      allow update: if isAuthenticated() &&
+        request.resource.data.status in ["Masuk", "Proses", "Selesai", "Diambil"];
+      allow delete: if isAdmin();
+    }
+
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        isValidString('name', 1, 100) &&
+        isValidString('phone', 1, 20);
+      allow delete: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

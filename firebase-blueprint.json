@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Laundry transaction record",
+      "type": "object",
+      "properties": {
+        "invoiceNo": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "weight": { "type": "number" },
+        "pricePerKg": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "entryDate": { "type": "string", "format": "date-time" },
+        "estimateDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Masuk", "Proses", "Selesai", "Diambil"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["invoiceNo", "customerName", "customerPhone", "serviceName", "weight", "totalPrice", "status"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "lastVisit": { "type": "string", "format": "date-time" },
+        "totalTransactions": { "type": "number" }
+      },
+      "required": ["name", "phone"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Laundry service types and prices",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "pricePerKg": { "type": "number" },
+        "description": { "type": "string" }
+      },
+      "required": ["name", "pricePerKg"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Application settings",
+      "type": "object",
+      "properties": {
+        "laundryName": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsappMessage": { "type": "string" },
+        "nextInvoiceNo": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Collection of laundry transactions"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Collection of customers"
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Collection of available services"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Application configuration"
+    }
+  }
+}

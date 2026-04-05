@@ -9,25 +9,40 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
+      console.log('[v0] Starting Google login...');
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      await signInWithPopup(auth, provider);
+      console.log('[v0] GoogleAuthProvider created');
+      
+      const result = await signInWithPopup(auth, provider);
+      console.log('[v0] Login successful:', result.user.email);
     } catch (error) {
-      console.error('[v0] Login error details:', error);
+      console.error('[v0] Login error:', error);
       
       let errorMessage = 'Gagal masuk. Pastikan Anda menggunakan akun Google yang valid.';
+      let errorCode = '';
       
       if (error instanceof Error) {
-        if (error.message.includes('auth/popup-closed-by-user')) {
+        errorCode = (error as any).code || '';
+        console.error('[v0] Error code:', errorCode);
+        console.error('[v0] Error message:', error.message);
+        
+        if (errorCode === 'auth/popup-closed-by-user' || error.message.includes('popup-closed-by-user')) {
           errorMessage = 'Pop-up login ditutup. Silakan coba lagi.';
-        } else if (error.message.includes('auth/popup-blocked')) {
+        } else if (errorCode === 'auth/popup-blocked' || error.message.includes('popup-blocked')) {
           errorMessage = 'Pop-up login diblokir oleh browser. Harap izinkan pop-up untuk domain ini.';
-        } else if (error.message.includes('auth/operation-not-allowed')) {
-          errorMessage = 'Google Sign-in belum diaktifkan. Hubungi administrator.';
-        } else if (error.message.includes('auth/invalid-api-key')) {
-          errorMessage = 'Konfigurasi Firebase tidak valid. Harap periksa pengaturan.';
+        } else if (errorCode === 'auth/operation-not-allowed') {
+          errorMessage = 'Google Sign-in belum diaktifkan di Firebase Console.';
+        } else if (errorCode === 'auth/invalid-api-key' || error.message.includes('invalid-api-key')) {
+          errorMessage = 'Konfigurasi Firebase tidak valid. Harap periksa API Key.';
+        } else if (errorCode === 'auth/unauthorized-domain') {
+          errorMessage = 'Domain ini belum disetujui di Firebase Console.';
+        } else if (error.message.includes('Firebase API key is invalid')) {
+          errorMessage = 'Firebase API Key tidak valid. Periksa firebase-applet-config.json';
+        } else if (error.message.includes('This domain is not authorized')) {
+          errorMessage = 'Domain tidak terdaftar. Tambahkan domain ke Firebase Console.';
         }
       }
       

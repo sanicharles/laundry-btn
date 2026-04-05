@@ -16,6 +16,7 @@ import { handleFirestoreError, OperationType } from './lib/utils';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [fallbackUser, setFallbackUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [activePage, setActivePage] = useState('dashboard');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -24,12 +25,38 @@ export default function App() {
     setToast({ message, type });
   };
 
+  // Listen for fallback login events
+  useEffect(() => {
+    const handleFallbackLogin = (event: CustomEvent) => {
+      setFallbackUser(event.detail.user);
+      setIsAuthReady(true);
+    };
+
+    window.addEventListener('fallback_login', handleFallbackLogin as EventListener);
+    
+    // Check if there's already a fallback session stored
+    const storedFallbackUser = localStorage.getItem('fallback_user');
+    if (storedFallbackUser) {
+      try {
+        setFallbackUser(JSON.parse(storedFallbackUser));
+        setIsAuthReady(true);
+      } catch (e) {
+        console.error('Failed to parse fallback user:', e);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('fallback_login', handleFallbackLogin as EventListener);
+    };
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      setIsAuthReady(true);
-
       if (user) {
+        setUser(user);
+        setFallbackUser(null);
+        setIsAuthReady(true);
+
         try {
           // Initialize default services if empty
           const servicesSnap = await getDocs(collection(db, 'services'));
@@ -50,10 +77,13 @@ export default function App() {
             console.error('Error initializing services:', error);
           }
         }
+      } else if (!fallbackUser) {
+        // Only set as not ready if both Firebase user and fallback user are missing
+        setIsAuthReady(false);
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [fallbackUser]);
 
   if (!isAuthReady) {
     return (
@@ -66,9 +96,12 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !fallbackUser) {
     return <Login />;
   }
+
+  // Use Firebase user if available, otherwise use fallback user
+  const currentUser = user || fallbackUser;
 
   const renderPage = () => {
     switch (activePage) {

@@ -37,38 +37,40 @@ export const isConfigurationError = (error: any): boolean => {
 };
 
 /**
- * Creates a fallback anonymous user for development/testing when domain is not authorized
+ * Creates a fallback local session when Firebase auth is unavailable
+ * Stores user session in localStorage for offline/demo usage
  */
-export const createFallbackUser = async (auth: Auth, email: string): Promise<UserCredential> => {
+export const createFallbackUser = async (auth: Auth, email: string): Promise<any> => {
   try {
-    // Generate a unique email if domain issue
-    const fallbackEmail = `user_${Date.now()}@fallback.local`;
-    const fallbackPassword = `fallback_${Math.random().toString(36).substring(2, 15)}`;
-    
-    try {
-      // Try to sign up with fallback credentials
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        fallbackEmail, 
-        fallbackPassword
-      );
-      
-      // Update profile with original email attempt
-      await updateProfile(userCredential.user, {
-        displayName: email.split('@')[0]
-      }).catch(() => {
-        // If profile update fails, continue anyway
-      });
-      
-      return userCredential;
-    } catch (signUpError) {
-      // If user already exists, try to sign in
-      try {
-        return await signInWithEmailAndPassword(auth, fallbackEmail, fallbackPassword);
-      } catch {
-        throw signUpError;
+    // Create a local fallback user object
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const fallbackUser = {
+      uid: userId,
+      email: email || 'user@demo.local',
+      displayName: 'User',
+      emailVerified: false,
+      isAnonymous: true,
+      metadata: {
+        createdAt: new Date().toISOString(),
+        lastSignedInTime: new Date().toISOString()
       }
-    }
+    };
+    
+    // Store in localStorage as fallback session
+    localStorage.setItem('fallback_user', JSON.stringify(fallbackUser));
+    localStorage.setItem('fallback_session_id', userId);
+    localStorage.setItem('fallback_auth_token', `fallback_${Date.now()}`);
+    
+    // Dispatch custom event to notify app of fallback login
+    window.dispatchEvent(new CustomEvent('fallback_login', { 
+      detail: { user: fallbackUser } 
+    }));
+    
+    // Return a mock user credential object
+    return {
+      user: fallbackUser,
+      operationName: 'fallback'
+    };
   } catch (error) {
     throw new Error('Gagal membuat fallback session: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }

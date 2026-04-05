@@ -22,40 +22,32 @@ export default function Login() {
       try {
         await signInWithPopup(auth, provider);
       } catch (primaryError) {
-        // If domain is not authorized, try fallback
+        // If domain is not authorized or any auth error, use fallback
         if (isDomainUnauthorizedError(primaryError)) {
-          console.log('[v0] Domain unauthorized, attempting fallback...');
-          // Create a fallback session
-          await createFallbackUser(auth, 'user@google.local');
-          console.log('[v0] Fallback user created successfully');
+          setError('Domain tidak terdaftar. Menggunakan mode demo...');
+          setUseFallback(true);
+          // Auto-create fallback session
+          setTimeout(() => {
+            createFallbackSession();
+          }, 1500);
         } else {
           throw primaryError;
         }
       }
     } catch (error) {
       const errorResponse = await handleAuthError(error, auth);
-      
-      if (errorResponse.suggestedAction === 'MANUAL_DOMAIN_ADD') {
-        setError('Domain tidak terdaftar. Menggunakan fallback login...');
-        setUseFallback(true);
-        // Auto-retry with fallback after 1 second
-        setTimeout(() => {
-          handleFallbackLogin();
-        }, 1000);
-      } else {
-        setError(errorResponse.message);
-      }
+      setError(errorResponse.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleFallbackLogin = async () => {
+  const createFallbackSession = async () => {
     setIsLoading(true);
-    setError(null);
-    
     try {
-      await createFallbackUser(auth, 'user@fallback.local');
+      await createFallbackUser(auth, 'user@demo.local');
+      setError(null);
+      setUseFallback(false);
     } catch (error) {
       const errorResponse = await handleAuthError(error, auth);
       setError(errorResponse.message);

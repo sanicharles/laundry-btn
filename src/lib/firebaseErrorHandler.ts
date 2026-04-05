@@ -1,10 +1,4 @@
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  updateProfile,
-  Auth,
-  UserCredential 
-} from 'firebase/auth';
+import { Auth } from 'firebase/auth';
 
 /**
  * Detects if the error is due to domain not being authorized in Firebase

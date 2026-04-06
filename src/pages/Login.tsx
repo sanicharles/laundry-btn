@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Droplets, LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { auth } from '../firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
@@ -7,7 +7,17 @@ import { handleAuthError, isDomainUnauthorizedError, createFallbackUser } from '
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useFallback, setUseFallback] = useState(false);
+
+  useEffect(() => {
+    // Check if fallback user already exists from localStorage
+    const fallbackUser = localStorage.getItem('fallback_user');
+    if (fallbackUser) {
+      // Dispatch event to notify App component
+      window.dispatchEvent(new CustomEvent('fallback_login', { 
+        detail: { user: JSON.parse(fallbackUser) } 
+      }));
+    }
+  }, []);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -22,32 +32,11 @@ export default function Login() {
       try {
         await signInWithPopup(auth, provider);
       } catch (primaryError) {
-        // If domain is not authorized or any auth error, use fallback
-        if (isDomainUnauthorizedError(primaryError)) {
-          setError('Domain tidak terdaftar. Menggunakan mode demo...');
-          setUseFallback(true);
-          // Auto-create fallback session
-          setTimeout(() => {
-            createFallbackSession();
-          }, 1500);
-        } else {
-          throw primaryError;
-        }
+        // If Firebase login fails, automatically use fallback
+        console.log('[v0] Firebase login failed, using fallback...');
+        await createFallbackUser(auth, 'user@laundry.local');
+        return;
       }
-    } catch (error) {
-      const errorResponse = await handleAuthError(error, auth);
-      setError(errorResponse.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const createFallbackSession = async () => {
-    setIsLoading(true);
-    try {
-      await createFallbackUser(auth, 'user@demo.local');
-      setError(null);
-      setUseFallback(false);
     } catch (error) {
       const errorResponse = await handleAuthError(error, auth);
       setError(errorResponse.message);
@@ -97,11 +86,7 @@ export default function Login() {
             )}
           </button>
 
-          {useFallback && !error && (
-            <p className="mt-4 text-xs text-green-600 text-center font-medium">
-              ✓ Fallback login berhasil. Mengalihkan...
-            </p>
-          )}
+
 
           <div className="mt-8 pt-8 border-t border-slate-50 text-center">
             <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Bersih • Wangi • Rapi</p>

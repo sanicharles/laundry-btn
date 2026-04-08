@@ -31,7 +31,7 @@ import {
   DocumentSnapshot
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Transaction, Service, Customer, AppSettings, OrderStatus } from '../types';
+import { Transaction, Service, Customer, AppSettings, OrderStatus, TransactionItem } from '../types';
 import { formatCurrency, generateInvoiceNo, getWhatsAppLink, cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { format, addDays } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -60,10 +60,15 @@ export default function Transactions({ showToast }: TransactionsProps) {
     customerName: '',
     customerPhone: '',
     customerAddress: '',
-    serviceId: '',
-    weight: 0,
+    items: [] as TransactionItem[],
     notes: '',
     status: 'Masuk' as OrderStatus
+  });
+
+  // Current item state for modal
+  const [currentItem, setCurrentItem] = useState({
+    serviceId: '',
+    weight: 0
   });
 
   useEffect(() => {
@@ -124,39 +129,52 @@ export default function Transactions({ showToast }: TransactionsProps) {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent, shouldPrint: boolean = false) => {
+    if (e) e.preventDefault();
     if (!settings) return;
+    if (formData.items.length === 0) {
+      showToast('Tambahkan minimal satu layanan', 'error');
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const selectedService = services.find(s => s.id === formData.serviceId);
-      if (!selectedService) throw new Error('Pilih layanan');
-
       const invoiceNo = generateInvoiceNo(settings.nextInvoiceNo);
-      const totalPrice = formData.weight * selectedService.pricePerKg;
+      const totalPrice = formData.items.reduce((sum, item) => sum + item.total, 0);
+      const totalCost = formData.items.reduce((sum, item) => sum + item.totalCost, 0);
+      const totalProfit = totalPrice - totalCost;
+      const totalWeight = formData.items.reduce((sum, item) => sum + item.weight, 0);
       const entryDate = new Date().toISOString();
       const estimateDate = addDays(new Date(), 2).toISOString(); // Default 2 days
+
+      // Create a summary service name for backward compatibility
+      const serviceNameSummary = formData.items.length > 1 
+        ? `${formData.items[0].serviceName} + ${formData.items.length - 1} lainnya`
+        : formData.items[0].serviceName;
 
       const newTransaction: Omit<Transaction, 'id'> = {
         invoiceNo,
         customerName: formData.customerName,
         customerPhone: formData.customerPhone,
         customerAddress: formData.customerAddress,
-        serviceId: formData.serviceId,
-        serviceName: selectedService.name,
-        weight: formData.weight,
-        pricePerKg: selectedService.pricePerKg,
+        items: formData.items,
         totalPrice,
+        totalCost,
+        totalProfit,
         entryDate,
         estimateDate,
         status: formData.status,
         notes: formData.notes,
-        createdAt: entryDate
+        createdAt: entryDate,
+        serviceName: serviceNameSummary,
+        weight: totalWeight,
+        pricePerKg: formData.items[0].pricePerKg,
+        costPerKg: formData.items[0].costPerKg
       };
 
       // Add transaction
       const docRef = await addDoc(collection(db, 'transactions'), newTransaction);
+      const transactionWithId = { ...newTransaction, id: docRef.id } as Transaction;
       
       // Update next invoice number
       await updateDoc(doc(db, 'settings', 'main'), {
@@ -180,26 +198,31 @@ export default function Transactions({ showToast }: TransactionsProps) {
         });
       }
 
-      // Auto WhatsApp
-      const waMessage = settings.whatsappMessage
-        .replace('{{no_nota}}', invoiceNo)
-        .replace('{{nama}}', formData.customerName)
-        .replace('{{layanan}}', selectedService.name)
-        .replace('{{berat}}', formData.weight.toString())
-        .replace('{{total}}', totalPrice.toLocaleString('id-ID'));
-      
-      window.open(getWhatsAppLink(formData.customerPhone, waMessage), '_blank');
+      if (shouldPrint) {
+        await printReceipt(transactionWithId);
+      } else {
+        // Auto WhatsApp
+        const waMessage = settings.whatsappMessage
+          .replace('{{no_nota}}', invoiceNo)
+          .replace('{{nama}}', formData.customerName)
+          .replace('{{layanan}}', serviceNameSummary)
+          .replace('{{berat}}', totalWeight.toString())
+          .replace('{{total}}', totalPrice.toLocaleString('id-ID'));
+        
+        window.open(getWhatsAppLink(formData.customerPhone, waMessage), '_blank');
+      }
 
       setIsModalOpen(false);
       setFormData({
         customerName: '',
         customerPhone: '',
         customerAddress: '',
-        serviceId: '',
-        weight: 0,
+        items: [],
         notes: '',
         status: 'Masuk'
       });
+      setCurrentItem({ serviceId: '', weight: 0 });
+      showToast('Transaksi berhasil disimpan', 'success');
     } catch (error) {
       if (error instanceof Error && error.message.includes('permission')) {
         handleFirestoreError(error, OperationType.WRITE, 'transactions');
@@ -230,21 +253,65 @@ export default function Transactions({ showToast }: TransactionsProps) {
   const printReceipt = async (transaction: Transaction) => {
     setSelectedTransaction(transaction);
     setIsReceiptOpen(true);
-    // Wait for modal to render
-    setTimeout(async () => {
-      const element = document.getElementById('receipt-content');
-      if (element) {
-        const canvas = await html2canvas(element);
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF({
-          unit: 'mm',
-          format: [58, 200] // Thermal paper width
-        });
-        pdf.addImage(imgData, 'PNG', 0, 0, 58, (canvas.height * 58) / canvas.width);
-        pdf.autoPrint();
-        window.open(pdf.output('bloburl'), '_blank');
-      }
-    }, 500);
+    
+    return new Promise<void>((resolve) => {
+      setTimeout(async () => {
+        const element = document.getElementById('receipt-content');
+        if (element) {
+          try {
+            const canvas = await html2canvas(element, {
+              scale: 2,
+              useCORS: true,
+              logging: false
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+              unit: 'mm',
+              format: [58, Math.max(200, (canvas.height * 58) / canvas.width)]
+            });
+            pdf.addImage(imgData, 'PNG', 0, 0, 58, (canvas.height * 58) / canvas.width);
+            pdf.save(`Struk-${transaction.invoiceNo}.pdf`);
+            
+            const blobUrl = pdf.output('bloburl');
+            window.open(blobUrl, '_blank');
+          } catch (error) {
+            console.error('Error generating PDF:', error);
+            showToast('Gagal membuat PDF struk', 'error');
+          }
+        }
+        setIsReceiptOpen(false);
+        resolve();
+      }, 500);
+    });
+  };
+
+  const addItem = () => {
+    const selectedService = services.find(s => s.id === currentItem.serviceId);
+    if (!selectedService || currentItem.weight <= 0) return;
+
+    const newItem: TransactionItem = {
+      serviceId: selectedService.id,
+      serviceName: selectedService.name,
+      pricePerKg: selectedService.pricePerKg,
+      costPerKg: selectedService.costPerKg || 0,
+      weight: currentItem.weight,
+      total: selectedService.pricePerKg * currentItem.weight,
+      totalCost: (selectedService.costPerKg || 0) * currentItem.weight,
+      profit: (selectedService.pricePerKg - (selectedService.costPerKg || 0)) * currentItem.weight
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, newItem]
+    }));
+    setCurrentItem({ serviceId: '', weight: 0 });
+  };
+
+  const removeItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
   };
 
   const filteredTransactions = transactions.filter(t => 
@@ -318,8 +385,21 @@ export default function Transactions({ showToast }: TransactionsProps) {
                     <p className="text-sm font-bold text-slate-800">{t.customerName}</p>
                     <p className="text-xs text-slate-500">{t.customerPhone}</p>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{t.serviceName}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 font-medium">{t.weight} kg</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {t.items ? (
+                      <div className="max-w-[200px]">
+                        <p className="truncate font-medium">{t.items[0].serviceName}</p>
+                        {t.items.length > 1 && (
+                          <p className="text-[10px] text-blue-600">+{t.items.length - 1} layanan lainnya</p>
+                        )}
+                      </div>
+                    ) : (
+                      t.serviceName
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                    {t.items ? t.items.reduce((sum, item) => sum + item.weight, 0).toFixed(1) : t.weight} kg
+                  </td>
                   <td className="px-6 py-4 text-sm font-bold text-slate-800">{formatCurrency(t.totalPrice)}</td>
                   <td className="px-6 py-4">
                     <select 
@@ -387,7 +467,7 @@ export default function Transactions({ showToast }: TransactionsProps) {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={(e) => handleSubmit(e, false)} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Customer Info */}
                 <div className="space-y-4">
@@ -429,39 +509,83 @@ export default function Transactions({ showToast }: TransactionsProps) {
                 {/* Order Info */}
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Detail Pesanan</h4>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Jenis Layanan</label>
-                    <select 
-                      required
-                      className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500"
-                      value={formData.serviceId}
-                      onChange={(e) => setFormData({...formData, serviceId: e.target.value})}
-                    >
-                      <option value="">Pilih Layanan</option>
-                      {services.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} - {formatCurrency(s.pricePerKg)}/kg</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5">Berat (kg)</label>
-                      <input 
-                        type="number" 
-                        step="0.1"
-                        required
-                        className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500"
-                        value={formData.weight || ''}
-                        onChange={(e) => setFormData({...formData, weight: parseFloat(e.target.value)})}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5">Total Bayar</label>
-                      <div className="w-full px-4 py-2.5 bg-blue-50 text-blue-700 font-bold rounded-xl border border-blue-100">
-                        {formatCurrency(formData.weight * (services.find(s => s.id === formData.serviceId)?.pricePerKg || 0))}
+                  
+                  {/* Add Item Section */}
+                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3">
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pilih Layanan</label>
+                        <select 
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={currentItem.serviceId}
+                          onChange={(e) => setCurrentItem({...currentItem, serviceId: e.target.value})}
+                        >
+                          <option value="">Pilih Layanan</option>
+                          {services.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} - {formatCurrency(s.pricePerKg)}/kg</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Berat (kg)</label>
+                          <input 
+                            type="number" 
+                            step="0.1"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+                            value={currentItem.weight || ''}
+                            onChange={(e) => setCurrentItem({...currentItem, weight: parseFloat(e.target.value)})}
+                          />
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={addItem}
+                          disabled={!currentItem.serviceId || currentItem.weight <= 0}
+                          className="mt-5 px-4 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Tambah
+                        </button>
                       </div>
                     </div>
                   </div>
+
+                  {/* Items List */}
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                    {formData.items.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-800 truncate">{item.serviceName}</p>
+                          <p className="text-[10px] text-slate-500">{item.weight}kg x {formatCurrency(item.pricePerKg)}</p>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <p className="text-sm font-bold text-blue-600">{formatCurrency(item.total)}</p>
+                          <button 
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {formData.items.length === 0 && (
+                      <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-2xl">
+                        <p className="text-xs text-slate-400">Belum ada layanan ditambahkan</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary */}
+                  <div className="pt-4 border-t border-slate-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-slate-500">Total Bayar</span>
+                      <span className="text-xl font-black text-blue-600">
+                        {formatCurrency(formData.items.reduce((sum, item) => sum + item.total, 0))}
+                      </span>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1.5">Catatan</label>
                     <input 
@@ -474,20 +598,38 @@ export default function Transactions({ showToast }: TransactionsProps) {
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-100 flex gap-3">
+              <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3.5 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-colors"
+                  className="flex-1 py-3.5 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-colors order-3 sm:order-1"
                 >
                   Batal
                 </button>
                 <button 
+                  type="button"
+                  disabled={isLoading}
+                  onClick={(e) => handleSubmit(e as any, true)}
+                  className="flex-1 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2 order-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+                    <>
+                      <Printer size={18} />
+                      Simpan & Cetak
+                    </>
+                  )}
+                </button>
+                <button 
                   type="submit"
                   disabled={isLoading}
-                  className="flex-[2] py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2 order-1 sm:order-3"
                 >
-                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Simpan & Kirim WA'}
+                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+                    <>
+                      <MessageCircle size={18} />
+                      Simpan & WA
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -9,10 +9,11 @@ import Settings from './pages/Settings';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
 import { Loader2 } from 'lucide-react';
-import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import Toast, { ToastType } from './components/Toast';
 import { handleFirestoreError, OperationType } from './lib/utils';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +42,18 @@ export default function App() {
             for (const s of defaultServices) {
               await setDoc(doc(collection(db, 'services')), s);
             }
+          }
+
+          // Initialize default settings if empty
+          const settingsDoc = await getDoc(doc(db, 'settings', 'main'));
+          if (!settingsDoc.exists()) {
+            await setDoc(doc(db, 'settings', 'main'), {
+              laundryName: 'Laundry Kita',
+              address: 'Jl. Contoh No. 123, Kota',
+              phone: '08123456789',
+              whatsappMessage: 'Halo {{nama}},\n\nPesanan laundry Anda dengan No. Nota {{no_nota}} ({{layanan}}) seberat {{berat}}kg telah kami terima.\n\nTotal: {{total}}\n\nTerima kasih telah menggunakan layanan kami!',
+              nextInvoiceNo: 1
+            });
           }
         } catch (error) {
           // Only handle if it's a permission error, otherwise just log
@@ -82,7 +95,7 @@ export default function App() {
   };
 
   return (
-    <>
+    <ErrorBoundary>
       <Layout activePage={activePage} setActivePage={setActivePage}>
         {renderPage()}
       </Layout>
@@ -93,6 +106,6 @@ export default function App() {
           onClose={() => setToast(null)} 
         />
       )}
-    </>
+    </ErrorBoundary>
   );
 }

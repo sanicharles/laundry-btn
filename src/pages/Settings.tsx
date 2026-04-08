@@ -10,7 +10,8 @@ import {
   MapPin,
   Tag,
   Loader2,
-  X
+  X,
+  Edit2
 } from 'lucide-react';
 import { 
   collection, 
@@ -42,7 +43,19 @@ export default function Settings({ showToast }: SettingsProps) {
 
   useEffect(() => {
     const unsubSettings = onSnapshot(doc(db, 'settings', 'main'), (doc) => {
-      if (doc.exists()) setSettings(doc.data() as AppSettings);
+      if (doc.exists()) {
+        setSettings(doc.data() as AppSettings);
+      } else {
+        // If it doesn't exist, it should be initialized by App.tsx, 
+        // but we can set a fallback here to avoid infinite loading
+        setSettings({
+          laundryName: 'Laundry Kita',
+          address: '',
+          phone: '',
+          whatsappMessage: '',
+          nextInvoiceNo: 1
+        });
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'settings/main');
     });
@@ -85,13 +98,15 @@ export default function Settings({ showToast }: SettingsProps) {
       if (editingService.id) {
         await updateDoc(doc(db, 'services', editingService.id), {
           name: editingService.name,
-          pricePerKg: editingService.pricePerKg
+          pricePerKg: editingService.pricePerKg,
+          costPerKg: editingService.costPerKg || 0
         });
         showToast('Layanan berhasil diperbarui', 'success');
       } else {
         await addDoc(collection(db, 'services'), {
           name: editingService.name,
           pricePerKg: editingService.pricePerKg,
+          costPerKg: editingService.costPerKg || 0,
           description: ''
         });
         showToast('Layanan berhasil ditambahkan', 'success');
@@ -207,7 +222,11 @@ export default function Settings({ showToast }: SettingsProps) {
               <div key={s.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl group">
                 <div>
                   <p className="font-bold text-slate-800">{s.name}</p>
-                  <p className="text-xs text-blue-600 font-semibold">{formatCurrency(s.pricePerKg)} / kg</p>
+                  <div className="flex gap-3 text-xs font-semibold">
+                    <p className="text-blue-600">Jual: {formatCurrency(s.pricePerKg)}</p>
+                    <p className="text-slate-400">Modal: {formatCurrency(s.costPerKg || 0)}</p>
+                    <p className="text-emerald-600">Profit: {formatCurrency((s.pricePerKg || 0) - (s.costPerKg || 0))}</p>
+                  </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 
@@ -265,13 +284,23 @@ export default function Settings({ showToast }: SettingsProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Harga per Kg</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">Harga Jual per Kg</label>
                 <input 
                   type="number" 
                   required
                   className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500"
                   value={editingService?.pricePerKg || ''}
-                  onChange={(e) => setEditingService({...editingService, pricePerKg: parseInt(e.target.value)})}
+                  onChange={(e) => setEditingService({...editingService, pricePerKg: Number(e.target.value) || 0})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">Harga Modal per Kg</label>
+                <input 
+                  type="number" 
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500"
+                  value={editingService?.costPerKg || ''}
+                  onChange={(e) => setEditingService({...editingService, costPerKg: Number(e.target.value) || 0})}
                 />
               </div>
               <div className="pt-4 flex gap-3">
@@ -323,5 +352,3 @@ export default function Settings({ showToast }: SettingsProps) {
     </div>
   );
 }
-
-import { Edit2 } from 'lucide-react';

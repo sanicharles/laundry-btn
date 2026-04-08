@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     todayTransactions: 0,
     todayRevenue: 0,
+    todayProfit: 0,
     totalCustomers: 0,
     activeOrders: 0,
     completedOrders: 0
@@ -57,6 +58,7 @@ export default function Dashboard() {
         ...prev,
         todayTransactions: todayTrans.length,
         todayRevenue: todayTrans.reduce((sum, t) => sum + t.totalPrice, 0),
+        todayProfit: todayTrans.reduce((sum, t) => sum + (t.totalProfit || 0), 0),
         activeOrders: active.length,
         completedOrders: completed.length
       }));
@@ -77,6 +79,7 @@ export default function Dashboard() {
         return {
           name: dayStr,
           revenue: dayTrans.reduce((sum, t) => sum + t.totalPrice, 0),
+          profit: dayTrans.reduce((sum, t) => sum + (t.totalProfit || 0), 0),
           count: dayTrans.length
         };
       });
@@ -100,8 +103,8 @@ export default function Dashboard() {
   const statCards = [
     { label: 'Transaksi Hari Ini', value: stats.todayTransactions, icon: TrendingUp, color: 'blue' },
     { label: 'Pendapatan Hari Ini', value: formatCurrency(stats.todayRevenue), icon: FileText, color: 'emerald' },
-    { label: 'Total Pelanggan', value: stats.totalCustomers, icon: Users, color: 'indigo' },
-    { label: 'Pesanan Aktif', value: stats.activeOrders, icon: Clock, color: 'amber' },
+    { label: 'Profit Hari Ini', value: formatCurrency(stats.todayProfit), icon: TrendingUp, color: 'indigo' },
+    { label: 'Total Pelanggan', value: stats.totalCustomers, icon: Users, color: 'blue' },
   ];
 
   return (
@@ -148,15 +151,20 @@ export default function Dashboard() {
                     <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1}/>
                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                   </linearGradient>
+                  <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dx={-10} />
                 <Tooltip 
                   contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                  formatter={(value: number) => [formatCurrency(value), 'Pendapatan']}
+                  formatter={(value: number, name: string) => [formatCurrency(value), name === 'revenue' ? 'Pendapatan' : 'Profit']}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" name="revenue" />
+                <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorProfit)" name="profit" />
               </AreaChart>
             </ResponsiveContainer>
           </div>

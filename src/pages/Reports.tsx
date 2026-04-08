@@ -49,7 +49,8 @@ export default function Reports() {
   });
 
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
-  const totalWeight = filteredTransactions.reduce((sum, t) => sum + t.weight, 0);
+  const totalProfit = filteredTransactions.reduce((sum, t) => sum + (t.totalProfit || 0), 0);
+  const totalWeight = filteredTransactions.reduce((sum, t) => sum + (t.weight || 0), 0);
 
   const exportToExcel = () => {
     const data = filteredTransactions.map(t => ({
@@ -58,7 +59,9 @@ export default function Reports() {
       'Pelanggan': t.customerName,
       'Layanan': t.serviceName,
       'Berat (kg)': t.weight,
-      'Total': t.totalPrice,
+      'Total Pendapatan': t.totalPrice,
+      'Total Modal': t.totalCost || 0,
+      'Total Profit': t.totalProfit || 0,
       'Status': t.status
     }));
 
@@ -80,12 +83,13 @@ export default function Reports() {
       t.serviceName,
       `${t.weight}kg`,
       formatCurrency(t.totalPrice),
+      formatCurrency(t.totalProfit || 0),
       t.status
     ]);
 
     doc.autoTable({
       startY: 30,
-      head: [['Nota', 'Tgl', 'Pelanggan', 'Layanan', 'Berat', 'Total', 'Status']],
+      head: [['Nota', 'Tgl', 'Pelanggan', 'Layanan', 'Berat', 'Total', 'Profit', 'Status']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillStyle: [37, 99, 235] }
@@ -158,13 +162,20 @@ export default function Reports() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
             <DollarSign size={24} />
           </div>
           <p className="text-sm font-medium text-slate-500 mb-1">Total Pendapatan</p>
           <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(totalRevenue)}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
+            <TrendingUp size={24} />
+          </div>
+          <p className="text-sm font-medium text-slate-500 mb-1">Total Profit</p>
+          <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(totalProfit)}</h3>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
           <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4">
@@ -193,6 +204,7 @@ export default function Reports() {
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pelanggan</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Layanan</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Profit</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
@@ -204,6 +216,7 @@ export default function Reports() {
                   <td className="px-6 py-4 text-sm text-slate-800 font-medium">{t.customerName}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{t.serviceName}</td>
                   <td className="px-6 py-4 text-sm font-bold text-slate-800">{formatCurrency(t.totalPrice)}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-emerald-600">{formatCurrency(t.totalProfit || 0)}</td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full",

@@ -58,7 +58,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          (request.auth.token.email == "sanicharles323@gmail.com" && request.auth.token.email_verified == true));
+          (request.auth.token.email in ["sanicharles323@gmail.com", "bakulcool515@gmail.com"] && request.auth.token.email_verified == true));
     }
 
     function isValidString(field, min, max) {
@@ -104,7 +104,7 @@ service cloud.firestore {
     }
 
     match /services/{serviceId} {
-      allow read: if isAuthenticated();
+      allow get, list: if isAuthenticated();
       allow create, update, delete: if isAdmin();
     }
 

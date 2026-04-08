@@ -38,12 +38,26 @@ export default function Receipt({ transaction, settings }: ReceiptProps) {
 
       <div className="border-t border-dashed border-black my-2"></div>
 
-      <div className="mb-2">
-        <div className="font-bold">{transaction.serviceName}</div>
-        <div className="flex justify-between pl-2">
-          <span>{transaction.weight}kg x {formatCurrency(transaction.pricePerKg)}</span>
-          <span>{formatCurrency(transaction.totalPrice)}</span>
-        </div>
+      <div className="space-y-2">
+        {transaction.items ? (
+          transaction.items.map((item, index) => (
+            <div key={index}>
+              <div className="font-bold">{item.serviceName}</div>
+              <div className="flex justify-between pl-2">
+                <span>{item.weight}kg x {formatCurrency(item.pricePerKg)}</span>
+                <span>{formatCurrency(item.total)}</span>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="mb-2">
+            <div className="font-bold">{transaction.serviceName}</div>
+            <div className="flex justify-between pl-2">
+              <span>{transaction.weight}kg x {formatCurrency(transaction.pricePerKg || 0)}</span>
+              <span>{formatCurrency(transaction.totalPrice)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-dashed border-black my-2"></div>

@@ -1,19 +1,36 @@
 import React, { useState } from 'react';
-import { Droplets, LogIn, Loader2 } from 'lucide-react';
+import { Droplets, LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { auth } from '../firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Login error:', error);
-      alert('Gagal masuk. Pastikan Anda menggunakan akun Google yang valid.');
+    } catch (error: any) {
+      console.error('[v0] Login error:', error?.code, error?.message);
+      let errorMessage = 'Gagal masuk. Silakan coba lagi.';
+      
+      if (error?.code === 'auth/popup-blocked') {
+        errorMessage = 'Popup login diblokir. Izinkan popup di browser Anda dan coba lagi.';
+      } else if (error?.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Login dibatalkan. Silakan coba lagi.';
+      } else if (error?.code === 'auth/network-request-failed') {
+        errorMessage = 'Koneksi internet gagal. Periksa koneksi Anda dan coba lagi.';
+      } else if (error?.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Google Sign-In tidak diaktifkan. Hubungi administrator.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -35,6 +52,13 @@ export default function Login() {
             <h2 className="text-xl font-bold text-slate-800">Selamat Datang</h2>
             <p className="text-sm text-slate-500 mt-1">Silakan masuk untuk mengelola laundry Anda.</p>
           </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
 
           <button
             onClick={handleGoogleLogin}

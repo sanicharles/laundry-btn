@@ -17,7 +17,11 @@ export default function Login() {
       });
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error('[v0] Login error:', error?.code, error?.message);
+      console.error('[v0] Full error object:', error);
+      console.error('[v0] Login error code:', error?.code);
+      console.error('[v0] Login error message:', error?.message);
+      console.error('[v0] Login error customData:', error?.customData);
+      
       let errorMessage = 'Gagal masuk. Silakan coba lagi.';
       
       if (error?.code === 'auth/popup-blocked') {
@@ -28,6 +32,12 @@ export default function Login() {
         errorMessage = 'Koneksi internet gagal. Periksa koneksi Anda dan coba lagi.';
       } else if (error?.code === 'auth/operation-not-allowed') {
         errorMessage = 'Google Sign-In tidak diaktifkan. Hubungi administrator.';
+      } else if (error?.code === 'auth/invalid-api-key') {
+        errorMessage = 'Konfigurasi Firebase tidak valid. Hubungi administrator.';
+      } else if (error?.code === 'auth/invalid-client-id') {
+        errorMessage = 'Client ID Firebase tidak valid. Hubungi administrator.';
+      } else if (error?.code === 'auth/user-disabled') {
+        errorMessage = 'Akun Anda telah dinonaktifkan. Hubungi administrator.';
       }
       
       setError(errorMessage);
